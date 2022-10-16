@@ -47,6 +47,7 @@ type syncOptions struct {
 	dryRun                   bool                      // Don't actually copy anything, just output what it would have done
 	preserveDigests          bool                      // Preserve digests during sync
 	keepGoing                bool                      // Whether or not to abort the sync if there are any errors during syncing the images
+	topRefs                  int                       // Only get amount of top latest refs
 }
 
 // repoDescriptor contains information of a single repository used as a sync source.
@@ -114,6 +115,7 @@ See skopeo-sync(1) for details.
 	flags.StringVarP(&opts.destination, "dest", "d", "", "DESTINATION transport type")
 	flags.BoolVar(&opts.scoped, "scoped", false, "Images at DESTINATION are prefixed using the full source image path as scope")
 	flags.BoolVar(&opts.scopedAppendRegistry, "scoped-append-registry", true, "Add root registry name to DESTINATION image prefix when using --scoped")
+	flags.IntVar(&opts.topRefs, "top-refs", 0, "Only get amount of top latest refs")
 	flags.BoolVarP(&opts.all, "all", "a", false, "Copy all images if SOURCE-IMAGE is a list")
 	flags.BoolVar(&opts.dryRun, "dry-run", false, "Run without actually copying data")
 	flags.BoolVar(&opts.preserveDigests, "preserve-digests", false, "Preserve digests of images and lists")
@@ -633,6 +635,12 @@ func (opts *syncOptions) run(args []string, stdout io.Writer) (retErr error) {
 
 	for _, srcRepo := range srcRepoList {
 		options.SourceCtx = srcRepo.Context
+		// only proceed for top refs if defined
+		if opts.topRefs > 0 {
+			totalRefs := len(srcRepo.ImageRefs)
+			logrus.Infof("Only sync top latest %d ref(s) from total %d ref(s)", opts.topRefs, totalRefs)
+			srcRepo.ImageRefs = srcRepo.ImageRefs[totalRefs - opts.topRefs:]
+		}
 		for counter, ref := range srcRepo.ImageRefs {
 			var destSuffix string
 			switch ref.Transport() {
