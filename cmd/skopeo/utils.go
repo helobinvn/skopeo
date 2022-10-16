@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/containers/image/v5/docker/reference"
 	"io"
 	"os"
 	"strings"
@@ -20,6 +21,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 	"golang.org/x/term"
+	"github.com/hashicorp/go-version"
 )
 
 // errorShouldDisplayUsage is a subtype of error used by command handlers to indicate that cli.ShowSubcommandHelp should be called.
@@ -408,4 +410,19 @@ func promptForPassphrase(privateKeyFile string, stdin, stdout *os.File) (string,
 	}
 	fmt.Fprintf(stdout, "\n")
 	return string(passphrase), nil
+}
+
+// Filter out refs which are not follow Semantic versioning
+func filterOutRefsNonSemver(imgRefs []types.ImageReference) ([]types.ImageReference, []types.ImageReference) {
+	var semverRefs []types.ImageReference
+	var nonSemverRefs []types.ImageReference
+	for _, ref := range imgRefs {
+		_, err := version.NewVersion(ref.DockerReference().(reference.Tagged).Tag())
+		if err != nil {
+			nonSemverRefs = append(nonSemverRefs, ref)
+			continue
+		}
+		semverRefs = append(semverRefs, ref)
+	}
+	return semverRefs, nonSemverRefs
 }
