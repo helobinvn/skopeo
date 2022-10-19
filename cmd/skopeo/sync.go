@@ -10,6 +10,7 @@ import (
 	"path"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 
 	commonFlag "github.com/containers/common/pkg/flag"
@@ -230,8 +231,19 @@ func getImageTags(ctx context.Context, sysCtx *types.SystemContext, repoRef refe
 			return nil, fmt.Errorf("Error determining repository tags for image %s: %w", name, err)
 		}
 	}
+	// Filter out none Semver compliant tags
+	semverTags, noneSemverTags := filterOutNoneSemver(tags)
+	if len(noneSemverTags) > 0 {
+		logrus.WithFields(logrus.Fields{
+			"image": name,
+		}).Warningf("Skip following None Semver compliant tags: %s", noneSemverTags)
+	}
 
-	return tags, nil
+	sort.Sort(bySemver(semverTags))
+	logrus.WithFields(logrus.Fields{
+		"image": name,
+	}).Infof("List tags after sorting: %s", semverTags)
+	return semverTags, nil
 }
 
 // imagesToCopyFromRepo builds a list of image references from the tags
@@ -637,9 +649,13 @@ func (opts *syncOptions) run(args []string, stdout io.Writer) (retErr error) {
 		options.SourceCtx = srcRepo.Context
 		// only proceed for top refs if defined
 		if opts.topRefs > 0 {
+			topRefs := opts.topRefs
 			totalRefs := len(srcRepo.ImageRefs)
-			logrus.Infof("Only sync top latest %d ref(s) from total %d ref(s)", opts.topRefs, totalRefs)
-			srcRepo.ImageRefs = srcRepo.ImageRefs[totalRefs - opts.topRefs:]
+			if topRefs > totalRefs {
+				topRefs = totalRefs
+			}
+			logrus.Infof("Only sync top latest %d ref(s) from total %d ref(s)", topRefs, totalRefs)
+			srcRepo.ImageRefs = srcRepo.ImageRefs[totalRefs - topRefs:]
 		}
 		for counter, ref := range srcRepo.ImageRefs {
 			var destSuffix string

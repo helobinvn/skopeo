@@ -7,6 +7,7 @@ require (
 	github.com/containers/image/v5 v5.23.0
 	github.com/containers/ocicrypt v1.1.5
 	github.com/containers/storage v1.43.0
+	github.com/hashicorp/go-version v1.6.0
 	github.com/opencontainers/go-digest v1.0.0
 	github.com/opencontainers/image-spec v1.1.0-rc1
 	github.com/opencontainers/image-tools v1.0.0-rc3

@@ -20,6 +20,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 	"golang.org/x/term"
+	"github.com/hashicorp/go-version"
 )
 
 // errorShouldDisplayUsage is a subtype of error used by command handlers to indicate that cli.ShowSubcommandHelp should be called.
@@ -408,4 +409,35 @@ func promptForPassphrase(privateKeyFile string, stdin, stdout *os.File) (string,
 	}
 	fmt.Fprintf(stdout, "\n")
 	return string(passphrase), nil
+}
+
+// Sort image tags by Semver
+type bySemver []string
+func (a bySemver) Len() int { return len(a) }
+func (a bySemver) Swap(i, j int) { a[i], a[j] = a[j], a[i] }
+func (a bySemver) Less(i, j int) bool {
+	v1, err := version.NewVersion(a[i])
+	if err != nil {
+		panic(err)
+	}
+	v2, err := version.NewVersion(a[j])
+	if err != nil {
+		panic(err)
+	}
+	return v1.LessThan(v2)
+}
+
+// Filter out tags which are not Semver compliant
+func filterOutNoneSemver(tags []string) ([]string, []string) {
+	newTags := make([]string, 0)
+	invalidTags := make([]string, 0)
+	for _, tag := range tags {
+		_, err := version.NewVersion(tag)
+		if err != nil {
+			invalidTags = append(invalidTags, tag)
+			continue
+		}
+		newTags = append(newTags, tag)
+	}
+	return newTags, invalidTags
 }
