@@ -236,13 +236,13 @@ func getImageTags(ctx context.Context, sysCtx *types.SystemContext, repoRef refe
 	if len(noneSemverTags) > 0 {
 		logrus.WithFields(logrus.Fields{
 			"image": name,
-		}).Warningf("Skip following None Semver compliant tags: %s", noneSemverTags)
+		}).Debugf("Skip following None Semver compliant tags: %s", noneSemverTags)
 	}
 
 	sort.Sort(bySemver(semverTags))
 	logrus.WithFields(logrus.Fields{
 		"image": name,
-	}).Infof("List tags after sorting: %s", semverTags)
+	}).Debugf("List tags after sorting: %s", semverTags)
 	return semverTags, nil
 }
 
