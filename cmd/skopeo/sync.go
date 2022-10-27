@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/hashicorp/go-version"
 	"io"
 	"io/fs"
 	"os"
@@ -231,19 +232,8 @@ func getImageTags(ctx context.Context, sysCtx *types.SystemContext, repoRef refe
 			return nil, fmt.Errorf("Error determining repository tags for image %s: %w", name, err)
 		}
 	}
-	// Filter out none Semver compliant tags
-	semverTags, noneSemverTags := filterOutNoneSemver(tags)
-	if len(noneSemverTags) > 0 {
-		logrus.WithFields(logrus.Fields{
-			"image": name,
-		}).Debugf("Skip following None Semver compliant tags: %s", noneSemverTags)
-	}
 
-	sort.Sort(bySemver(semverTags))
-	logrus.WithFields(logrus.Fields{
-		"image": name,
-	}).Debugf("List tags after sorting: %s", semverTags)
-	return semverTags, nil
+	return tags, nil
 }
 
 // imagesToCopyFromRepo builds a list of image references from the tags
@@ -649,13 +639,23 @@ func (opts *syncOptions) run(args []string, stdout io.Writer) (retErr error) {
 		options.SourceCtx = srcRepo.Context
 		// only proceed for top refs if defined
 		if opts.topRefs > 0 {
+			// Check Semver
+			semverRefs, noneSemverRefs := filterOutRefsNoneSemver(srcRepo.ImageRefs)
+			logrus.Warnf("Filtered out %d ref(s) are not follow Semver in total %d ref(s)", len(noneSemverRefs), len(srcRepo.ImageRefs))
+			// sort semverRefs
+			sort.Slice(semverRefs, func(i, j int) bool {
+				v1, _ := version.NewVersion(semverRefs[i].StringWithinTransport())
+				v2, _ := version.NewVersion(semverRefs[j].StringWithinTransport())
+				return v1.LessThan(v2)
+			})
 			topRefs := opts.topRefs
 			totalRefs := len(srcRepo.ImageRefs)
-			if topRefs > totalRefs {
-				topRefs = totalRefs
+			totalSemverRefs := len(semverRefs)
+			if topRefs > totalSemverRefs {
+				topRefs = totalSemverRefs
 			}
-			logrus.Infof("Only sync top latest %d ref(s) from total %d ref(s)", topRefs, totalRefs)
-			srcRepo.ImageRefs = srcRepo.ImageRefs[totalRefs - topRefs:]
+			logrus.Infof("Only sync top largest %d ref(s) follow Semver in %d ref(s) from the total %d ref(s)", topRefs, totalSemverRefs, totalRefs)
+			srcRepo.ImageRefs = semverRefs[totalSemverRefs - topRefs:]
 		}
 		for counter, ref := range srcRepo.ImageRefs {
 			var destSuffix string

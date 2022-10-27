@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/containers/image/v5/docker/reference"
 	"io"
 	"os"
 	"strings"
@@ -416,14 +417,8 @@ type bySemver []string
 func (a bySemver) Len() int { return len(a) }
 func (a bySemver) Swap(i, j int) { a[i], a[j] = a[j], a[i] }
 func (a bySemver) Less(i, j int) bool {
-	v1, err := version.NewVersion(a[i])
-	if err != nil {
-		panic(err)
-	}
-	v2, err := version.NewVersion(a[j])
-	if err != nil {
-		panic(err)
-	}
+	v1, _ := version.NewVersion(a[i])
+	v2, _ := version.NewVersion(a[j])
 	return v1.LessThan(v2)
 }
 
@@ -440,4 +435,27 @@ func filterOutNoneSemver(tags []string) ([]string, []string) {
 		newTags = append(newTags, tag)
 	}
 	return newTags, invalidTags
+}
+
+// Filter out tags which are not Semver compliant
+func filterOutRefsNoneSemver(imgRefs []types.ImageReference) ([]types.ImageReference, []types.ImageReference) {
+	var semverRefs []types.ImageReference
+	var noneSemverRefs []types.ImageReference
+	for _, ref := range imgRefs {
+		name := ref.DockerReference()
+		fmt.Print("Output from DockerReference", name)
+
+		tag := name.(reference.Tagged)
+		fmt.Print("Output from reference.Tagged", tag)
+		fmt.Printf("Processing filter Semver for version %s", tag.Tag())
+
+		_, err := version.NewVersion(tag.Tag())
+		if err != nil {
+			fmt.Printf("Error when create new version from %s version",tag.Tag())
+			noneSemverRefs = append(noneSemverRefs, ref)
+			continue
+		}
+		semverRefs = append(semverRefs, ref)
+	}
+	return semverRefs, noneSemverRefs
 }
