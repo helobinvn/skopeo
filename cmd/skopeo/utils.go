@@ -451,7 +451,7 @@ func filterOutRefsNoneSemver(imgRefs []types.ImageReference) ([]types.ImageRefer
 
 		_, err := version.NewVersion(tag.Tag())
 		if err != nil {
-			fmt.Printf("Error when create new version from %s version",tag.Tag())
+			fmt.Printf("Error when create new version from %s version", tag.Tag())
 			noneSemverRefs = append(noneSemverRefs, ref)
 			continue
 		}

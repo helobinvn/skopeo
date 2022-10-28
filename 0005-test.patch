@@ -1,31 +1,144 @@
-From 38994b62ad1296ad42d25401181f1634bf5b7b1d Mon Sep 17 00:00:00 2001
+From 5370a8b7dc1ced916e0ac8071020264a00d9ec48 Mon Sep 17 00:00:00 2001
 From: Binh Pham <binh.pham@gooddata.com>
 Date: Thu, 27 Oct 2022 21:32:14 +0700
 Subject: [PATCH 5/5] test
 
 ---
- 0005-test.patch     | 105 ++++++++++++++++++++++++++++++++++++++++++++
- cmd/skopeo/sync.go  |  38 +++++++++-------
- cmd/skopeo/utils.go |  17 +++++++
- 3 files changed, 144 insertions(+), 16 deletions(-)
+ 0005-test.patch     | 220 ++++++++++++++++++++++++++++++++++++++++++++
+ cmd/skopeo/sync.go  |  32 +++----
+ cmd/skopeo/utils.go |  34 +++++--
+ 3 files changed, 262 insertions(+), 24 deletions(-)
  create mode 100644 0005-test.patch
 
 diff --git a/0005-test.patch b/0005-test.patch
 new file mode 100644
-index 00000000..4e1a295b
+index 00000000..da56d781
 --- /dev/null
 +++ b/0005-test.patch
-@@ -0,0 +1,105 @@
-+From de38724d11a9024ac1313b0dbfff0bd5389e1f8b Mon Sep 17 00:00:00 2001
+@@ -0,0 +1,220 @@
++From 38994b62ad1296ad42d25401181f1634bf5b7b1d Mon Sep 17 00:00:00 2001
 +From: Binh Pham <binh.pham@gooddata.com>
 +Date: Thu, 27 Oct 2022 21:32:14 +0700
 +Subject: [PATCH 5/5] test
 +
 +---
-+ cmd/skopeo/sync.go  | 38 ++++++++++++++++++++++----------------
-+ cmd/skopeo/utils.go | 15 +++++++++++++++
-+ 2 files changed, 37 insertions(+), 16 deletions(-)
++ 0005-test.patch     | 105 ++++++++++++++++++++++++++++++++++++++++++++
++ cmd/skopeo/sync.go  |  38 +++++++++-------
++ cmd/skopeo/utils.go |  17 +++++++
++ 3 files changed, 144 insertions(+), 16 deletions(-)
++ create mode 100644 0005-test.patch
 +
++diff --git a/0005-test.patch b/0005-test.patch
++new file mode 100644
++index 00000000..4e1a295b
++--- /dev/null
+++++ b/0005-test.patch
++@@ -0,0 +1,105 @@
+++From de38724d11a9024ac1313b0dbfff0bd5389e1f8b Mon Sep 17 00:00:00 2001
+++From: Binh Pham <binh.pham@gooddata.com>
+++Date: Thu, 27 Oct 2022 21:32:14 +0700
+++Subject: [PATCH 5/5] test
+++
+++---
+++ cmd/skopeo/sync.go  | 38 ++++++++++++++++++++++----------------
+++ cmd/skopeo/utils.go | 15 +++++++++++++++
+++ 2 files changed, 37 insertions(+), 16 deletions(-)
+++
+++diff --git a/cmd/skopeo/sync.go b/cmd/skopeo/sync.go
+++index 27c2c401..13a8f93d 100644
+++--- a/cmd/skopeo/sync.go
++++++ b/cmd/skopeo/sync.go
+++@@ -4,6 +4,7 @@ import (
+++ 	"context"
+++ 	"errors"
+++ 	"fmt"
++++	"github.com/hashicorp/go-version"
+++ 	"io"
+++ 	"io/fs"
+++ 	"os"
+++@@ -231,19 +232,8 @@ func getImageTags(ctx context.Context, sysCtx *types.SystemContext, repoRef refe
+++ 			return nil, fmt.Errorf("Error determining repository tags for image %s: %w", name, err)
+++ 		}
+++ 	}
+++-	// Filter out none Semver compliant tags
+++-	semverTags, noneSemverTags := filterOutNoneSemver(tags)
+++-	if len(noneSemverTags) > 0 {
+++-		logrus.WithFields(logrus.Fields{
+++-			"image": name,
+++-		}).Debugf("Skip following None Semver compliant tags: %s", noneSemverTags)
+++-	}
+++ 
+++-	sort.Sort(bySemver(semverTags))
+++-	logrus.WithFields(logrus.Fields{
+++-		"image": name,
+++-	}).Debugf("List tags after sorting: %s", semverTags)
+++-	return semverTags, nil
++++	return tags, nil
+++ }
+++ 
+++ // imagesToCopyFromRepo builds a list of image references from the tags
+++@@ -649,13 +639,29 @@ func (opts *syncOptions) run(args []string, stdout io.Writer) (retErr error) {
+++ 		options.SourceCtx = srcRepo.Context
+++ 		// only proceed for top refs if defined
+++ 		if opts.topRefs > 0 {
++++			// Check Semver
++++			semverRefs, noneSemverRefs := filterOutRefsNoneSemver(srcRepo.ImageRefs)
++++			logrus.Warnf("Filtered out %d ref(s) are not follow Semver in total %d ref(s)", len(noneSemverRefs), len(srcRepo.ImageRefs))
++++			// sort semverRefs
++++			sort.Slice(semverRefs, func(i, j int) bool {
++++				v1, err := version.NewVersion(semverRefs[i].StringWithinTransport())
++++				if err != nil {
++++					panic(err)
++++				}
++++				v2, err := version.NewVersion(semverRefs[j].StringWithinTransport())
++++				if err != nil {
++++					panic(err)
++++				}
++++				return v1.LessThan(v2)
++++			})
+++ 			topRefs := opts.topRefs
+++ 			totalRefs := len(srcRepo.ImageRefs)
+++-			if topRefs > totalRefs {
+++-				topRefs = totalRefs
++++			totalSemverRefs := len(semverRefs)
++++			if topRefs > totalSemverRefs {
++++				topRefs = totalSemverRefs
+++ 			}
+++-			logrus.Infof("Only sync top latest %d ref(s) from total %d ref(s)", topRefs, totalRefs)
+++-			srcRepo.ImageRefs = srcRepo.ImageRefs[totalRefs - topRefs:]
++++			logrus.Infof("Only sync top largest %d ref(s) follow Semver in %d ref(s) from the total %d ref(s)", topRefs, totalSemverRefs, totalRefs)
++++			srcRepo.ImageRefs = semverRefs[totalSemverRefs - topRefs:]
+++ 		}
+++ 		for counter, ref := range srcRepo.ImageRefs {
+++ 			var destSuffix string
+++diff --git a/cmd/skopeo/utils.go b/cmd/skopeo/utils.go
+++index 2e93468d..a885759d 100644
+++--- a/cmd/skopeo/utils.go
++++++ b/cmd/skopeo/utils.go
+++@@ -440,4 +440,19 @@ func filterOutNoneSemver(tags []string) ([]string, []string) {
+++ 		newTags = append(newTags, tag)
+++ 	}
+++ 	return newTags, invalidTags
++++}
++++
++++// Filter out tags which are not Semver compliant
++++func filterOutRefsNoneSemver(imgRefs []types.ImageReference) ([]types.ImageReference, []types.ImageReference) {
++++	var semverRefs []types.ImageReference
++++	var noneSemverRefs []types.ImageReference
++++	for _, ref := range imgRefs {
++++		_, err := version.NewVersion(ref.StringWithinTransport())
++++		if err != nil {
++++			noneSemverRefs = append(noneSemverRefs, ref)
++++			continue
++++		}
++++		semverRefs = append(semverRefs, ref)
++++	}
++++	return semverRefs, noneSemverRefs
+++ }
+++\ No newline at end of file
+++-- 
+++2.36.1
+++
 +diff --git a/cmd/skopeo/sync.go b/cmd/skopeo/sync.go
 +index 27c2c401..13a8f93d 100644
 +--- a/cmd/skopeo/sync.go
@@ -94,10 +207,10 @@ index 00000000..4e1a295b
 + 		for counter, ref := range srcRepo.ImageRefs {
 + 			var destSuffix string
 +diff --git a/cmd/skopeo/utils.go b/cmd/skopeo/utils.go
-+index 2e93468d..a885759d 100644
++index 2e93468d..26fef42e 100644
 +--- a/cmd/skopeo/utils.go
 ++++ b/cmd/skopeo/utils.go
-+@@ -440,4 +440,19 @@ func filterOutNoneSemver(tags []string) ([]string, []string) {
++@@ -440,4 +440,21 @@ func filterOutNoneSemver(tags []string) ([]string, []string) {
 + 		newTags = append(newTags, tag)
 + 	}
 + 	return newTags, invalidTags
@@ -108,8 +221,10 @@ index 00000000..4e1a295b
 ++	var semverRefs []types.ImageReference
 ++	var noneSemverRefs []types.ImageReference
 ++	for _, ref := range imgRefs {
+++		fmt.Printf("Processing filter Semver for version %s", ref.StringWithinTransport())
 ++		_, err := version.NewVersion(ref.StringWithinTransport())
 ++		if err != nil {
+++			fmt.Printf("Error when create new version from %s version",ref.StringWithinTransport())
 ++			noneSemverRefs = append(noneSemverRefs, ref)
 ++			continue
 ++		}
@@ -122,7 +237,7 @@ index 00000000..4e1a295b
 +2.36.1
 +
 diff --git a/cmd/skopeo/sync.go b/cmd/skopeo/sync.go
-index 27c2c401..13a8f93d 100644
+index 27c2c401..c00c85f8 100644
 --- a/cmd/skopeo/sync.go
 +++ b/cmd/skopeo/sync.go
 @@ -4,6 +4,7 @@ import (
@@ -154,7 +269,7 @@ index 27c2c401..13a8f93d 100644
  }
  
  // imagesToCopyFromRepo builds a list of image references from the tags
-@@ -649,13 +639,29 @@ func (opts *syncOptions) run(args []string, stdout io.Writer) (retErr error) {
+@@ -649,13 +639,23 @@ func (opts *syncOptions) run(args []string, stdout io.Writer) (retErr error) {
  		options.SourceCtx = srcRepo.Context
  		// only proceed for top refs if defined
  		if opts.topRefs > 0 {
@@ -163,14 +278,8 @@ index 27c2c401..13a8f93d 100644
 +			logrus.Warnf("Filtered out %d ref(s) are not follow Semver in total %d ref(s)", len(noneSemverRefs), len(srcRepo.ImageRefs))
 +			// sort semverRefs
 +			sort.Slice(semverRefs, func(i, j int) bool {
-+				v1, err := version.NewVersion(semverRefs[i].StringWithinTransport())
-+				if err != nil {
-+					panic(err)
-+				}
-+				v2, err := version.NewVersion(semverRefs[j].StringWithinTransport())
-+				if err != nil {
-+					panic(err)
-+				}
++				v1, _ := version.NewVersion(semverRefs[i].StringWithinTransport())
++				v2, _ := version.NewVersion(semverRefs[j].StringWithinTransport())
 +				return v1.LessThan(v2)
 +			})
  			topRefs := opts.topRefs
@@ -189,10 +298,35 @@ index 27c2c401..13a8f93d 100644
  		for counter, ref := range srcRepo.ImageRefs {
  			var destSuffix string
 diff --git a/cmd/skopeo/utils.go b/cmd/skopeo/utils.go
-index 2e93468d..26fef42e 100644
+index 2e93468d..11688ef0 100644
 --- a/cmd/skopeo/utils.go
 +++ b/cmd/skopeo/utils.go
-@@ -440,4 +440,21 @@ func filterOutNoneSemver(tags []string) ([]string, []string) {
+@@ -4,6 +4,7 @@ import (
+ 	"context"
+ 	"errors"
+ 	"fmt"
++	"github.com/containers/image/v5/docker/reference"
+ 	"io"
+ 	"os"
+ 	"strings"
+@@ -416,14 +417,8 @@ type bySemver []string
+ func (a bySemver) Len() int { return len(a) }
+ func (a bySemver) Swap(i, j int) { a[i], a[j] = a[j], a[i] }
+ func (a bySemver) Less(i, j int) bool {
+-	v1, err := version.NewVersion(a[i])
+-	if err != nil {
+-		panic(err)
+-	}
+-	v2, err := version.NewVersion(a[j])
+-	if err != nil {
+-		panic(err)
+-	}
++	v1, _ := version.NewVersion(a[i])
++	v2, _ := version.NewVersion(a[j])
+ 	return v1.LessThan(v2)
+ }
+ 
+@@ -440,4 +435,27 @@ func filterOutNoneSemver(tags []string) ([]string, []string) {
  		newTags = append(newTags, tag)
  	}
  	return newTags, invalidTags
@@ -203,10 +337,16 @@ index 2e93468d..26fef42e 100644
 +	var semverRefs []types.ImageReference
 +	var noneSemverRefs []types.ImageReference
 +	for _, ref := range imgRefs {
-+		fmt.Printf("Processing filter Semver for version %s", ref.StringWithinTransport())
-+		_, err := version.NewVersion(ref.StringWithinTransport())
++		name := ref.DockerReference()
++		fmt.Print("Output from DockerReference", name)
++
++		tag := name.(reference.Tagged)
++		fmt.Print("Output from reference.Tagged", tag)
++		fmt.Printf("Processing filter Semver for version %s", tag.Tag())
++
++		_, err := version.NewVersion(tag.Tag())
 +		if err != nil {
-+			fmt.Printf("Error when create new version from %s version",ref.StringWithinTransport())
++			fmt.Printf("Error when create new version from %s version",tag.Tag())
 +			noneSemverRefs = append(noneSemverRefs, ref)
 +			continue
 +		}

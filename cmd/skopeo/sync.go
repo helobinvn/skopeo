@@ -644,8 +644,8 @@ func (opts *syncOptions) run(args []string, stdout io.Writer) (retErr error) {
 			logrus.Warnf("Filtered out %d ref(s) are not follow Semver in total %d ref(s)", len(noneSemverRefs), len(srcRepo.ImageRefs))
 			// sort semverRefs
 			sort.Slice(semverRefs, func(i, j int) bool {
-				v1, _ := version.NewVersion(semverRefs[i].StringWithinTransport())
-				v2, _ := version.NewVersion(semverRefs[j].StringWithinTransport())
+				v1, _ := version.NewVersion(semverRefs[i].DockerReference().(reference.Tagged).Tag())
+				v2, _ := version.NewVersion(semverRefs[j].DockerReference().(reference.Tagged).Tag())
 				return v1.LessThan(v2)
 			})
 			topRefs := opts.topRefs
